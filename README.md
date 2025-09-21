@@ -78,10 +78,10 @@ pip install -r requirements.txt
 4. **Configure environment variables** (`.env` file):
 
 ```
-MONGODB_USER=nosql_db
-MONGODB_PASS=nosql_db
-MONGODB_CLUSTER=nosql.vojsy9y.mongodb.net
-MONGODB_DB=NOSQL
+MONGODB_USER=<username> (sample : nosql_db)
+MONGODB_PASS=<password> (sample: nosql_db)
+MONGODB_CLUSTER=<cluster name> (sample: nosql.vojsy9y.mongodb.net)
+MONGODB_DB=<database_name> (sample: NOSQL)
 KAFKA_BOOTSTRAP=localhost:9092
 ```
 
@@ -100,7 +100,7 @@ KAFKA_BOOTSTRAP=localhost:9092
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 
-uri = "mongodb+srv://nosql_db:nosql_db@nosql.vojsy9y.mongodb.net/?retryWrites=true&w=majority"
+uri = "mongodb+srv://<username>:<password>@nosql.vojsy9y.mongodb.net/?retryWrites=true&w=majority"
 client = MongoClient(uri, server_api=ServerApi('1'))
 
 try:
