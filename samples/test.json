@@ -1,0 +1,20 @@
+{
+  "paper_id": "arxiv:2509.12345",
+  "title": "A Distributed Knowledge Graph for Scientific Literature",
+  "abstract": "This paper introduces a scalable architecture for building a distributed knowledge graph for scientific publications, enabling real-time analytics and recommendations.",
+  "authors": [
+    {"name": "Alice Johnson", "institution": "MIT"},
+    {"name": "Bob Kumar", "institution": "IIT Delhi"}
+  ],
+  "journal": "ArXiv",
+  "published_date": "2025-09-20",
+  "references": [
+    "doi:10.1000/xyz123",
+    "doi:10.1000/xyz456"
+  ],
+  "keywords": ["knowledge graph", "scientific literature", "distributed systems"],
+  "provenance": {
+    "source": "ArXiv API",
+    "ingested_at": "2025-09-21T10:00:00Z"
+  }
+}
