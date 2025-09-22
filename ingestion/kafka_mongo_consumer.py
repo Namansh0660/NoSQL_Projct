@@ -1,12 +1,12 @@
 """
-Kafka → MongoDB consumer for NOSQL KG project
+Kafka → MongoDB Atlas consumer for NOSQL KG project
 
 Features:
 - Routes messages into different collections based on `doc_type`:
     - "paper"  -> papers
     - "pdf"    -> pdfs
     - "binary" -> binaries
-- Deduplicates documents by `id` or `payload` checksum
+- Deduplicates documents by `id` or payload checksum
 - Merges metadata for existing entries
 - Prepares collection for Knowledge Graph ingestion
 - Handles edge cases: missing id, unknown doc_type, JSON errors
@@ -17,7 +17,7 @@ import logging
 import sys
 import hashlib
 from kafka import KafkaConsumer
-from pymongo import MongoClient, UpdateOne
+from db import papers_collection, pdfs_collection, binaries_collection  # ✅ Atlas
 
 # -----------------------------
 # Setup logging
@@ -30,22 +30,14 @@ logging.basicConfig(
 logger = logging.getLogger("kafka_mongo_consumer")
 
 # -----------------------------
-# MongoDB connection
+# Map doc_type -> Atlas collection
 # -----------------------------
-MONGO_URI = "mongodb://localhost:27017/"
-DB_NAME = "nosql_kg"
-
-client = MongoClient(MONGO_URI)
-db = client[DB_NAME]
-
-# Map doc_type -> collection
 DOC_TYPE_COLLECTION_MAP = {
-    "paper": db.papers,
-    "pdf": db.pdfs,
-    "binary": db.binaries,
+    "paper": papers_collection,
+    "pdf": pdfs_collection,
+    "binary": binaries_collection,
 }
-
-DEFAULT_COLLECTION = db.papers  # fallback
+DEFAULT_COLLECTION = papers_collection  # fallback
 
 # -----------------------------
 # Kafka Consumer config
@@ -77,7 +69,7 @@ def compute_checksum(payload: str) -> str:
 # -----------------------------
 def upsert_document(collection, doc: dict):
     """
-    Insert or update document in MongoDB collection.
+    Insert or update document in MongoDB Atlas collection.
     Deduplicate by 'id' or checksum if available.
     Merge metadata if document already exists.
     """
@@ -86,24 +78,20 @@ def upsert_document(collection, doc: dict):
     checksum = doc.get("checksum") or compute_checksum(payload)
 
     if not doc_id:
-        logger.warning(f"Skipping document without 'id': {doc}")
+        logger.warning(f"⚠️ Skipping document without 'id': {doc}")
         return
 
-    # Add checksum to doc
     doc["checksum"] = checksum
-
-    # Prepare update
-    update_doc = {
-        "$set": doc
-    }
 
     try:
         collection.update_one(
             {"id": doc_id},
-            update_doc,
+            {"$set": doc},
             upsert=True
         )
-        logger.info(f"✅ Stored/updated doc_type='{doc.get('doc_type')}' id={doc_id} in collection '{collection.name}'")
+        logger.info(
+            f"✅ Stored/updated doc_type='{doc.get('doc_type', 'paper')}' id={doc_id} in collection '{collection.name}'"
+        )
     except Exception as e:
         logger.error(f"❌ Failed to store document {doc_id}: {e}")
 
@@ -113,8 +101,6 @@ def upsert_document(collection, doc: dict):
 for message in consumer:
     try:
         doc = message.value
-
-        # Determine collection
         doc_type = doc.get("doc_type", "paper")
         collection = DOC_TYPE_COLLECTION_MAP.get(doc_type, DEFAULT_COLLECTION)
 

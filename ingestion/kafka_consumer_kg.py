@@ -1,21 +1,23 @@
 """
-NOSQL/ingestion/kafka_consumer_kg.py
-
-- Kafka consumer for raw_papers topic
-- Normalizes data, builds KG nodes & edges, inserts into MongoDB
-- Runs continuously for real-time ingestion
+Kafka → MongoDB Consumer for NOSQL KG (Atlas-ready)
+--------------------------------------------------
+- Consumes messages from 'raw_papers' Kafka topic
+- Normalizes data, builds KG nodes & edges
+- Inserts into MongoDB Atlas collections
 """
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import json
 import logging
 import sys
 import time
 from hashlib import sha256
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 from kafka import KafkaConsumer
-from kafka.errors import KafkaError
-from pymongo import MongoClient
+from api.db import papers_collection, kg_nodes_collection, kg_edges_collection  # ✅ Atlas collections
 
 # -----------------------------
 # Logging
@@ -25,23 +27,10 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler(sys.stdout)]
 )
-logger = logging.getLogger("nosql.kafka_consumer_kg")
+logger = logging.getLogger("kafka_consumer_kg")
 
 # -----------------------------
-# MongoDB
-# -----------------------------
-MONGO_URI = "mongodb://localhost:27017/"
-DB_NAME = "nosql_kg"
-
-client = MongoClient(MONGO_URI)
-db = client[DB_NAME]
-
-PAPERS_COLLECTION = db.papers
-KG_NODES = db.kg_nodes
-KG_EDGES = db.kg_edges
-
-# -----------------------------
-# Kafka
+# Kafka Config
 # -----------------------------
 BOOTSTRAP_SERVERS = "localhost:9092"
 TOPIC = "raw_papers"
@@ -64,7 +53,6 @@ def deterministic_id(*parts: str) -> str:
     return sha256(combined.encode("utf-8")).hexdigest()
 
 def _safe_text(payload: Any) -> str:
-    """Ensure payload is string for KG"""
     if isinstance(payload, str):
         return payload
     if isinstance(payload, (dict, list)):
@@ -74,23 +62,23 @@ def _safe_text(payload: Any) -> str:
 # -----------------------------
 # KG Node & Edge helpers
 # -----------------------------
-def create_node(node_id: str, node_type: str, properties: dict) -> dict:
+def create_node(node_id: str, node_type: str, properties: Dict) -> Dict:
     return {"id": node_id, "type": node_type, "properties": properties}
 
-def create_edge(source_id: str, target_id: str, relation: str, properties: dict = None) -> dict:
+def create_edge(source_id: str, target_id: str, relation: str, properties: Dict = None) -> Dict:
     if properties is None:
         properties = {}
     return {"source": source_id, "target": target_id, "relation": relation, "properties": properties}
 
-def upsert_node(node: dict):
+def upsert_node(node: Dict):
     try:
-        KG_NODES.update_one({"id": node["id"]}, {"$set": node}, upsert=True)
+        kg_nodes_collection.update_one({"id": node["id"]}, {"$set": node}, upsert=True)
     except Exception as e:
         logger.error(f"Failed to upsert node {node['id']}: {e}")
 
-def upsert_edge(edge: dict):
+def upsert_edge(edge: Dict):
     try:
-        KG_EDGES.update_one(
+        kg_edges_collection.update_one(
             {"source": edge["source"], "target": edge["target"], "relation": edge["relation"]},
             {"$set": edge},
             upsert=True
@@ -101,7 +89,7 @@ def upsert_edge(edge: dict):
 # -----------------------------
 # Process a single paper
 # -----------------------------
-def process_paper(doc: dict):
+def process_paper(doc: Dict):
     payload = doc.get("payload")
     if isinstance(payload, str):
         try:
@@ -119,6 +107,9 @@ def process_paper(doc: dict):
             "title": payload.get("title"),
             "abstract": payload.get("abstract"),
             "doi": payload.get("doi"),
+            "authors": payload.get("authors", []),
+            "institutions": payload.get("institutions", []),
+            "keywords": payload.get("keywords", []),
             "metadata": payload.get("metadata", {}),
             "provenance": doc.get("provenance", {}),
         }
@@ -128,7 +119,7 @@ def process_paper(doc: dict):
     # --- Authors & edges ---
     authors = payload.get("authors") or []
     for author_name in authors:
-        author_id = f"author_{author_name}"
+        author_id = f"author_{author_name.replace(' ', '_').lower()}"
         author_node = create_node(author_id, "Author", {"name": author_name})
         upsert_node(author_node)
         upsert_edge(create_edge(paper_id, author_id, "authored_by"))
@@ -136,11 +127,12 @@ def process_paper(doc: dict):
     # --- Institutions ---
     institutions = payload.get("institutions") or []
     for inst in institutions:
-        inst_id = f"institution_{inst}"
+        inst_id = f"institution_{inst.replace(' ', '_').lower()}"
         inst_node = create_node(inst_id, "Institution", {"name": inst})
         upsert_node(inst_node)
         for author_name in authors:
-            upsert_edge(create_edge(f"author_{author_name}", inst_id, "affiliated_with"))
+            author_id = f"author_{author_name.replace(' ', '_').lower()}"
+            upsert_edge(create_edge(author_id, inst_id, "affiliated_with"))
 
     # --- Concepts / keywords ---
     concepts = payload.get("keywords") or []
@@ -154,7 +146,7 @@ def process_paper(doc: dict):
 # Main loop
 # -----------------------------
 def main():
-    logger.info("Kafka Consumer for NOSQL KG started...")
+    logger.info("Kafka Consumer for NOSQL KG started (Atlas)...")
     for message in consumer:
         try:
             doc = message.value

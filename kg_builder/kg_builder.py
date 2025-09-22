@@ -9,8 +9,9 @@ Knowledge Graph Builder for NOSQL KG project
 
 import logging
 import sys
-from pymongo import MongoClient
 import json
+from api.db import papers_collection, pdfs_collection, kg_nodes_collection, kg_edges_collection  # ✅ Atlas collections
+
 # -----------------------------
 # Logging setup
 # -----------------------------
@@ -22,28 +23,10 @@ logging.basicConfig(
 logger = logging.getLogger("kg_builder")
 
 # -----------------------------
-# MongoDB connection
-# -----------------------------
-MONGO_URI = "mongodb://localhost:27017/"
-DB_NAME = "nosql_kg"
-
-client = MongoClient(MONGO_URI)
-db = client[DB_NAME]
-
-PAPERS_COLLECTION = db.papers
-PDFS_COLLECTION = db.pdfs
-KG_NODES = db.kg_nodes
-KG_EDGES = db.kg_edges
-
-# -----------------------------
 # Helper: Generate node dict
 # -----------------------------
 def create_node(node_id: str, node_type: str, properties: dict):
-    return {
-        "id": node_id,
-        "type": node_type,
-        "properties": properties
-    }
+    return {"id": node_id, "type": node_type, "properties": properties}
 
 # -----------------------------
 # Helper: Generate edge dict
@@ -51,23 +34,14 @@ def create_node(node_id: str, node_type: str, properties: dict):
 def create_edge(source_id: str, target_id: str, relation: str, properties: dict = None):
     if properties is None:
         properties = {}
-    return {
-        "source": source_id,
-        "target": target_id,
-        "relation": relation,
-        "properties": properties
-    }
+    return {"source": source_id, "target": target_id, "relation": relation, "properties": properties}
 
 # -----------------------------
 # Deduplicate and upsert node
 # -----------------------------
 def upsert_node(node):
     try:
-        KG_NODES.update_one(
-            {"id": node["id"]},
-            {"$set": node},
-            upsert=True
-        )
+        kg_nodes_collection.update_one({"id": node["id"]}, {"$set": node}, upsert=True)
     except Exception as e:
         logger.error(f"Failed to upsert node {node['id']}: {e}")
 
@@ -76,12 +50,8 @@ def upsert_node(node):
 # -----------------------------
 def upsert_edge(edge):
     try:
-        KG_EDGES.update_one(
-            {
-                "source": edge["source"],
-                "target": edge["target"],
-                "relation": edge["relation"]
-            },
+        kg_edges_collection.update_one(
+            {"source": edge["source"], "target": edge["target"], "relation": edge["relation"]},
             {"$set": edge},
             upsert=True
         )
@@ -91,7 +61,6 @@ def upsert_edge(edge):
 # -----------------------------
 # Build KG from a single paper
 # -----------------------------
-
 def process_paper(doc):
     paper_id = doc.get("id")
     if not paper_id:
@@ -100,15 +69,14 @@ def process_paper(doc):
 
     payload = doc.get("payload", {})
 
-    # If payload is a string, try to parse JSON; else keep as text
+    # If payload is string, parse JSON; else keep text
     if isinstance(payload, str):
         try:
             payload = json.loads(payload)
         except json.JSONDecodeError:
-            # Treat as raw text for abstract
             payload = {"title": None, "abstract": payload, "doi": None, "authors": []}
 
-    # Now safe to do .get() on payload
+    # Paper node
     paper_node = create_node(
         node_id=paper_id,
         node_type="Paper",
@@ -129,18 +97,10 @@ def process_paper(doc):
 
     for author_name in authors:
         author_id = f"author_{author_name.replace(' ', '_').lower()}"
-        author_node = create_node(
-            node_id=author_id,
-            node_type="Author",
-            properties={"name": author_name}
-        )
+        author_node = create_node(node_id=author_id, node_type="Author", properties={"name": author_name})
         upsert_node(author_node)
 
-        edge = create_edge(
-            source_id=paper_id,
-            target_id=author_id,
-            relation="authored_by"
-        )
+        edge = create_edge(source_id=paper_id, target_id=author_id, relation="authored_by")
         upsert_edge(edge)
 
     # --- Institutions ---
@@ -150,11 +110,7 @@ def process_paper(doc):
 
     for inst in institutions:
         inst_id = f"institution_{inst.replace(' ', '_').lower()}"
-        inst_node = create_node(
-            node_id=inst_id,
-            node_type="Institution",
-            properties={"name": inst}
-        )
+        inst_node = create_node(node_id=inst_id, node_type="Institution", properties={"name": inst})
         upsert_node(inst_node)
 
         for author_name in authors:
@@ -165,46 +121,34 @@ def process_paper(doc):
             )
             upsert_edge(edge)
 
-    # --- Keywords / concepts ---
+    # --- Concepts / keywords ---
     concepts = payload.get("keywords", [])
     if not isinstance(concepts, list):
         concepts = []
 
     for concept in concepts:
         concept_id = f"concept_{concept.lower().replace(' ', '_')}"
-        concept_node = create_node(
-            node_id=concept_id,
-            node_type="Concept",
-            properties={"name": concept}
-        )
+        concept_node = create_node(node_id=concept_id, node_type="Concept", properties={"name": concept})
         upsert_node(concept_node)
 
-        edge = create_edge(
-            source_id=paper_id,
-            target_id=concept_id,
-            relation="mentions"
-        )
+        edge = create_edge(source_id=paper_id, target_id=concept_id, relation="mentions")
         upsert_edge(edge)
-
 
 # -----------------------------
 # Main KG Builder
 # -----------------------------
 def build_kg():
-    papers = list(PAPERS_COLLECTION.find({}))
-    pdfs = list(PDFS_COLLECTION.find({}))
+    papers = list(papers_collection.find({}))
+    pdfs = list(pdfs_collection.find({}))
 
     logger.info(f"Building KG from {len(papers)} papers and {len(pdfs)} PDFs")
 
-    # Process all papers
     for doc in papers:
         process_paper(doc)
-
-    # Process PDFs (as separate Paper nodes if not already present)
     for doc in pdfs:
         process_paper(doc)
 
-    logger.info("✅ Knowledge Graph construction completed")
+    logger.info("🎉 Knowledge Graph construction completed")
 
 # -----------------------------
 # Run KG Builder

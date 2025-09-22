@@ -12,21 +12,8 @@ Handles edge cases:
 - Normalizes author names and IDs
 """
 
-from pymongo import MongoClient
 import re
-
-# -----------------------------
-# MongoDB Connection
-# -----------------------------
-MONGO_URI = "mongodb://localhost:27017/"
-DB_NAME = "nosql_kg"
-KG_NODES = "kg_nodes"
-KG_EDGES = "kg_edges"
-
-client = MongoClient(MONGO_URI)
-db = client[DB_NAME]
-nodes_col = db[KG_NODES]
-edges_col = db[KG_EDGES]
+from api.db import kg_nodes_collection, kg_edges_collection  # ✅ Atlas collections
 
 # -----------------------------
 # Utility Functions
@@ -37,19 +24,19 @@ def normalize_name(name: str) -> str:
 
 def create_node(node_id: str, node_type: str, properties: dict):
     """Create node if it does not exist."""
-    existing = nodes_col.find_one({"id": node_id})
-    if not existing:
-        nodes_col.insert_one({
+    if not kg_nodes_collection.find_one({"id": node_id}):
+        kg_nodes_collection.insert_one({
             "id": node_id,
             "type": node_type,
             "properties": properties
         })
 
-def create_edge(source: str, target: str, relation: str, properties: dict = {}):
+def create_edge(source: str, target: str, relation: str, properties: dict = None):
     """Create edge safely (avoid duplicates)."""
-    existing = edges_col.find_one({"source": source, "target": target, "relation": relation})
-    if not existing:
-        edges_col.insert_one({
+    if properties is None:
+        properties = {}
+    if not kg_edges_collection.find_one({"source": source, "target": target, "relation": relation}):
+        kg_edges_collection.insert_one({
             "source": source,
             "target": target,
             "relation": relation,
@@ -60,7 +47,7 @@ def create_edge(source: str, target: str, relation: str, properties: dict = {}):
 # Main Edge Building Logic
 # -----------------------------
 def build_edges():
-    papers = list(nodes_col.find({"type": "Paper"}))
+    papers = list(kg_nodes_collection.find({"type": "Paper"}))
     print(f"[INFO] Found {len(papers)} papers to process.")
 
     for paper in papers:
@@ -95,7 +82,7 @@ def build_edges():
         # -----------------------------
         # 3. Mentions / Concepts edges (optional)
         # -----------------------------
-        concepts = properties.get("concepts", [])
+        concepts = properties.get("concepts", []) or properties.get("keywords", [])
         if isinstance(concepts, list):
             for concept in concepts:
                 concept_id = f"concept_{normalize_name(concept)}"
