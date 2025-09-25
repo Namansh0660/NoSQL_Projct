@@ -15,7 +15,7 @@ import time
 import signal
 import sys
 import logging
-from api.db import papers_collection  # ✅ Atlas connection
+from api.db import papers_collection, nodes_collection as kg_nodes_collection, edges_collection as kg_edges_collection  # ✅ Atlas connection
 
 # -----------------------------
 # Logging

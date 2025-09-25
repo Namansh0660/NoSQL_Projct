@@ -17,7 +17,7 @@ from hashlib import sha256
 from typing import Any, Dict
 
 from kafka import KafkaConsumer
-from api.db import papers_collection, kg_nodes_collection, kg_edges_collection  # ✅ Atlas collections
+from api.db import papers_collection, nodes_collection as kg_nodes_collection, edges_collection as kg_edges_collection  # ✅ Atlas collections
 
 # -----------------------------
 # Logging
