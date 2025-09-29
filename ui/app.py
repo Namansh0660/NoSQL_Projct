@@ -13,13 +13,8 @@ from ingestion.kafka_api_fetcher import fetch_arxiv, fetch_pubmed, fetch_crossre
 
 st.set_page_config(page_title="NOSQL KG Sharding Dashboard", layout="wide")
 
-MONGODB_URI = os.getenv("MONGODB_URI", "")  # Default to Atlas connection
-MONGODB_DB = os.getenv("MONGODB_DB", "NOSQL")
-
-@st.cache_resource
-def get_db():
-    client = MongoClient(MONGODB_URI)
-    return client[MONGODB_DB]
+# Use the same MongoDB connection as pipeline_runner.py
+from api.db import db  # This connects to Atlas by default
 
 def add_zone_key(papers: List[Dict]) -> List[Dict]:
     out = []
@@ -135,7 +130,6 @@ with col1:
     st.subheader("Last Fetch")
     if run_btn:
         random.seed(int(seed))
-        db = get_db()
 
         # Fetch papers (robust)
         fetched: List[Dict] = []
