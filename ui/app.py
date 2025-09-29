@@ -7,11 +7,13 @@ import datetime
 import streamlit as st
 from typing import Dict, List, Callable
 from pymongo import MongoClient
+import sys
+sys.path.append('.')
 from ingestion.kafka_api_fetcher import fetch_arxiv, fetch_pubmed, fetch_crossref
 
 st.set_page_config(page_title="NOSQL KG Sharding Dashboard", layout="wide")
 
-MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27018")
+MONGODB_URI = os.getenv("MONGODB_URI", "")  # Default to Atlas connection
 MONGODB_DB = os.getenv("MONGODB_DB", "NOSQL")
 
 @st.cache_resource

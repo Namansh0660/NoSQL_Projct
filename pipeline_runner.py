@@ -2,8 +2,7 @@
 """
 Pipeline Runner for NOSQL KG Project
 ------------------------------------
-- Starts Kafka producer
-- Starts Kafka consumer (normalizer + KG builder)
+- Runs Streamlit dashboard connecting to MongoDB Atlas
 - Monitors MongoDB Atlas 'papers' collection for new documents
 - Automatically triggers KG builder & edge builder
 - Handles graceful shutdown
@@ -74,13 +73,17 @@ def monitor_and_build_kg(poll_interval=10):
 # Main pipeline
 # -----------------------------
 def main():
-    # 1️⃣ Start Kafka producer
-    producer_process = run_script("ingestion/kafka_producer.py")
+    # 1️⃣ Start Streamlit dashboard (connecting to MongoDB Atlas)
+    logger.info("Starting Streamlit dashboard for Atlas sharding analysis...")
+    streamlit_process = subprocess.Popen([
+        sys.executable, "-m", "streamlit", "run", 
+        "ui/app.py", 
+        "--server.headless=true", 
+        "--server.port=8501",
+        "--global.developmentMode=false"
+    ])
 
-    # 2️⃣ Start Kafka consumer (normalized ingestion + KG nodes/edges)
-    consumer_process = run_script("ingestion/kafka_consumer_kg.py")
-
-    # 3️⃣ Start monitor thread for KG builder
+    # 2️⃣ Start monitor thread for KG builder
     monitor_thread = threading.Thread(target=monitor_and_build_kg, daemon=True)
     monitor_thread.start()
 
@@ -88,11 +91,15 @@ def main():
     try:
         while not _shutdown:
             time.sleep(1)
+            # Check if streamlit process is still running
+            if streamlit_process.poll() is not None:
+                logger.warning("Streamlit process terminated unexpectedly")
+                break
     finally:
         logger.info("Shutting down pipeline runner...")
-        for proc in [producer_process, consumer_process]:
-            if proc.poll() is None:
-                proc.terminate()
+        if streamlit_process.poll() is None:
+            streamlit_process.terminate()
+            streamlit_process.wait(timeout=10)
         monitor_thread.join()
         logger.info("Pipeline fully stopped.")
 
