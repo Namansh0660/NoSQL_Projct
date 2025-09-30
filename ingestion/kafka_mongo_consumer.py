@@ -15,9 +15,63 @@ Features:
 import json
 import logging
 import sys
+import os
 import hashlib
 from kafka import KafkaConsumer
-from db import papers_collection, pdfs_collection, binaries_collection  # ✅ Atlas
+from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure
+
+# MongoDB connection for local development
+MONGO_URI = os.environ.get(
+    "MONGO_URI", 
+    "mongodb://root:example@mongo:27017/nosql_kg?authSource=admin"
+)
+
+# For local testing outside Docker, try localhost if mongo hostname fails
+if "mongo:27017" in MONGO_URI and os.environ.get("IN_DOCKER") != "true":
+    try:
+        # Try with the Docker service name first
+        test_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
+        test_client.admin.command('ping')
+    except Exception:
+        # If that fails, try with localhost
+        logging.info("Couldn't connect to mongo:27017, trying localhost:27017")
+        MONGO_URI = MONGO_URI.replace("mongo:27017", "localhost:27017")
+
+# Connect to MongoDB
+try:
+    client = MongoClient(MONGO_URI)
+    # Verify connection
+    client.admin.command('ping')
+    logging.info(f"✅ Connected to MongoDB: {MONGO_URI}")
+    
+    # Get database
+    db = client.get_database()
+    
+    # Get collections
+    papers_collection = db["papers"]
+    pdfs_collection = db["pdfs"]
+    binaries_collection = db["binaries"]
+    
+except Exception as e:
+    logging.error(f"❌ Failed to connect to MongoDB: {e}")
+    # For testing, create mock collections
+    class MockCollection:
+        def __init__(self, name):
+            self.name = name
+        def insert_one(self, doc):
+            logging.info(f"MOCK: Would insert into {self.name}: {doc['id']}")
+            return True
+        def update_one(self, query, update, upsert=False):
+            logging.info(f"MOCK: Would update in {self.name}: {query}")
+            return True
+        def find_one(self, query):
+            logging.info(f"MOCK: Would find in {self.name}: {query}")
+            return None
+    
+    papers_collection = MockCollection("papers")
+    pdfs_collection = MockCollection("pdfs")
+    binaries_collection = MockCollection("binaries")
 
 # -----------------------------
 # Setup logging
@@ -42,9 +96,10 @@ DEFAULT_COLLECTION = papers_collection  # fallback
 # -----------------------------
 # Kafka Consumer config
 # -----------------------------
-TOPIC = "raw_papers"
-BOOTSTRAP_SERVERS = ["localhost:9092"]
-GROUP_ID = "nosql_consumer_group"
+TOPIC = os.environ.get("KAFKA_RAW_TOPIC", "raw_papers")
+BOOTSTRAP = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+BOOTSTRAP_SERVERS = [b.strip() for b in BOOTSTRAP.split(",") if b.strip()]
+GROUP_ID = os.environ.get("KAFKA_GROUP_ID", "nosql_consumer_group")
 
 consumer = KafkaConsumer(
     TOPIC,

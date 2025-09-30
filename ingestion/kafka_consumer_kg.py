@@ -32,9 +32,11 @@ logger = logging.getLogger("kafka_consumer_kg")
 # -----------------------------
 # Kafka Config
 # -----------------------------
-BOOTSTRAP_SERVERS = "localhost:9092"
-TOPIC = "raw_papers"
-GROUP_ID = "nosql_kg_consumer_v1"
+BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+TOPIC = os.getenv("KAFKA_RAW_TOPIC", "raw_papers")
+GROUP_ID = os.getenv("KAFKA_GROUP_ID", "nosql_kg_consumer_v1")
+
+logger.info(f"Connecting to Kafka at {BOOTSTRAP_SERVERS}, topic={TOPIC}")
 
 consumer = KafkaConsumer(
     TOPIC,
@@ -43,6 +45,9 @@ consumer = KafkaConsumer(
     group_id=GROUP_ID,
     enable_auto_commit=True,
     value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+    session_timeout_ms=30000,
+    heartbeat_interval_ms=10000,
+    max_poll_interval_ms=300000,
 )
 
 # -----------------------------

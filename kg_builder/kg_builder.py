@@ -10,7 +10,10 @@ Knowledge Graph Builder for NOSQL KG project
 import logging
 import sys
 import json
-from api.db import papers_collection, pdfs_collection, kg_nodes_collection, kg_edges_collection  # ✅ Atlas collections
+import os
+# Add project root to Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from api.db import papers_collection, nodes_collection as kg_nodes_collection, edges_collection as kg_edges_collection  # ✅ Atlas collections
 
 # -----------------------------
 # Logging setup
@@ -62,9 +65,10 @@ def upsert_edge(edge):
 # Build KG from a single paper
 # -----------------------------
 def process_paper(doc):
-    paper_id = doc.get("id")
+    # Generate ID from available fields
+    paper_id = doc.get("id") or doc.get("doi") or doc.get("fetch_url", "").split("/")[-1] or f"paper_{doc['_id']}"
     if not paper_id:
-        logger.warning("Skipping paper with missing id")
+        logger.warning(f"Skipping paper with missing id, doi, and url: {doc.get('title', 'Unknown')[:50]}")
         return
 
     payload = doc.get("payload", {})
@@ -139,13 +143,11 @@ def process_paper(doc):
 # -----------------------------
 def build_kg():
     papers = list(papers_collection.find({}))
-    pdfs = list(pdfs_collection.find({}))
+    # PDFs are handled as papers in our pipeline
 
-    logger.info(f"Building KG from {len(papers)} papers and {len(pdfs)} PDFs")
+    logger.info(f"Building KG from {len(papers)} papers")
 
     for doc in papers:
-        process_paper(doc)
-    for doc in pdfs:
         process_paper(doc)
 
     logger.info("🎉 Knowledge Graph construction completed")

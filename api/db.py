@@ -10,31 +10,37 @@ from dotenv import load_dotenv
 load_dotenv()
 MONGODB_DB = os.getenv("MONGODB_DB", "NOSQL")  # default to NOSQL if not set
 
-# Allow explicit URI override for local benchmarking (e.g., mongos on localhost:27018)
+# Allow explicit URI override for local/Atlas
 MONGODB_URI = os.getenv("MONGODB_URI")
 
 MONGODB_USER = os.getenv("MONGODB_USER")
 MONGODB_PASS = os.getenv("MONGODB_PASS")
 MONGODB_CLUSTER = os.getenv("MONGODB_CLUSTER")
 
-# Validate env
-if not all([MONGODB_USER, MONGODB_PASS, MONGODB_CLUSTER]):
-    raise ValueError("MongoDB credentials are not fully set in .env!")
-
 # -----------------------------
-# Build MongoDB URI
+# Build MongoDB URI with sensible fallbacks
 # -----------------------------
 if not MONGODB_URI:
-    if not all([MONGODB_USER, MONGODB_PASS, MONGODB_CLUSTER]):
-        raise ValueError("MongoDB credentials are not fully set in .env!")
-    MONGODB_URI = f"mongodb+srv://{MONGODB_USER}:{MONGODB_PASS}@{MONGODB_CLUSTER}/?retryWrites=true&w=majority&appName=NOSQL"
+    # If Atlas credentials are present, build an Atlas SRV URI
+    if all([MONGODB_USER, MONGODB_PASS, MONGODB_CLUSTER]):
+        MONGODB_URI = (
+            f"mongodb+srv://{MONGODB_USER}:{MONGODB_PASS}@{MONGODB_CLUSTER}/"
+            f"?retryWrites=true&w=majority&appName=NOSQL"
+        )
+    else:
+        # Fallback to local MongoDB (use Docker service name by default)
+        # This matches docker-compose defaults; replace host with localhost when running outside Docker
+        MONGODB_URI = "mongodb://root:example@mongo:27017/nosql_kg?authSource=admin&retryWrites=true&w=majority"
 
 # -----------------------------
 # Connect to MongoDB
 # -----------------------------
 try:
-    # If pointing at Atlas, Server API can be used; local mongos ignores it
-    client = MongoClient(MONGODB_URI, server_api=ServerApi('1'))
+    # Use Server API for Atlas SRV URIs; plain client for mongodb://
+    if MONGODB_URI.startswith("mongodb+srv://"):
+        client = MongoClient(MONGODB_URI, server_api=ServerApi('1'))
+    else:
+        client = MongoClient(MONGODB_URI)
     # Test connection
     client.admin.command('ping')
     print("✅ Successfully connected to MongoDB! URI=", MONGODB_URI)

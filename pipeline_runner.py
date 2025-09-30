@@ -15,6 +15,7 @@ import signal
 import sys
 import logging
 from api.db import papers_collection, nodes_collection as kg_nodes_collection, edges_collection as kg_edges_collection  # ✅ Atlas connection
+from pymongo import MongoClient
 
 # -----------------------------
 # Logging
@@ -63,11 +64,26 @@ def monitor_and_build_kg(poll_interval=10):
             new_papers = current_count - last_count
             logger.info(f"Detected {new_papers} new papers → running KG builder...")
 
-            # Run KG builder scripts sequentially
-            subprocess.run([sys.executable, "kg_builder/kg_builder.py"])
-            subprocess.run([sys.executable, "kg_builder/kg_edge_builder.py"])
+            # Run KG builder scripts sequentially from project root
+            subprocess.run([sys.executable, "kg_builder/kg_builder.py"], cwd=".")
+            subprocess.run([sys.executable, "kg_builder/kg_edge_builder.py"], cwd=".")
 
             last_count = current_count
+
+# -----------------------------
+# Function to get knowledge graph data
+# -----------------------------
+def get_knowledge_graph_data(limit, node_types, relation_types):
+    client = MongoClient("mongodb+srv://nosql_db:nosql_db@nosql.vojsy9y.mongodb.net/")
+    db = client["your_database_name"]
+    collection = db["your_collection_name"]
+
+    # Example query
+    nodes = list(collection.find({"type": {"$in": node_types}}).limit(limit))
+    edges = list(collection.find({"relation": {"$in": relation_types}}).limit(limit))
+    latest_update = collection.find_one(sort=[("updated_at", -1)])
+
+    return nodes, edges, latest_update
 
 # -----------------------------
 # Main pipeline
@@ -81,7 +97,7 @@ def main():
         "--server.headless=true", 
         "--server.port=8501",
         "--global.developmentMode=false"
-    ])
+    ], cwd=".")
 
     # 2️⃣ Start monitor thread for KG builder
     monitor_thread = threading.Thread(target=monitor_and_build_kg, daemon=True)

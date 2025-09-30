@@ -1,230 +1,336 @@
-# 📚 NoSQL Knowledge Graph Pipeline
+# NoSQL Knowledge Graph Project
 
-A full-stack **NoSQL Knowledge Graph (KG) system** for academic papers, built using **MongoDB Atlas**, **Kafka**, **FastAPI**, and Python.
-This project ingests papers, normalizes data, builds KG nodes & edges, and provides API endpoints for querying and traversing the KG.
+A comprehensive real-time knowledge graph system for academic papers with MongoDB Atlas sharding, Apache Kafka streaming, and interactive Streamlit dashboard. This project implements a complete pipeline for building and visualizing a knowledge graph of academic papers using NoSQL technologies.
 
----
+## 🎯 Features
 
-## **Table of Contents**
+- **Real-time Data Ingestion**: Fetches papers from ArXiv, PubMed, and CrossRef APIs
+- **Knowledge Graph Construction**: Automatically builds relationships between papers, authors, institutions, and concepts
+- **Interactive Dashboard**: Real-time visualization of knowledge graph with insights and metrics
+- **Sharding Analysis**: Implements and benchmarks different MongoDB sharding strategies
+- **Streaming Pipeline**: Kafka-based data processing for scalable ingestion
+- **Docker Integration**: Complete containerized setup for easy deployment
 
-1. [Project Structure](#project-structure)
-2. [Environment Setup](#environment-setup)
-3. [MongoDB Atlas Setup](#mongodb-atlas-setup)
-4. [Kafka Setup](#kafka-setup)
-5. [Running the Pipeline](#running-the-pipeline)
-6. [API](#api)
-7. [Sharding Notes](#sharding-notes)
-8. [Troubleshooting](#troubleshooting)
-
----
-
-## **Project Structure**
+## 🏗️ Architecture
 
 ```
-NOSQL/
-├── api/                       # FastAPI backend
-│   ├── routes/                # API routes
-│   │   ├── nodes.py
-│   │   ├── edges.py
-│   │── search.py
-│   │── search_embeddings.py
-│   │── traverse.py
-│   ├── db.py                  # MongoDB connection
-│   ├── main.py                # FastAPI app entry
-│   └── models.py              # Pydantic models
-├── ingestion/                 # Data ingestion and Kafka
-│   ├── pdf_parser.py
-│   ├── data_normalizer.py
-│   ├── kafka_producer.py
-│   ├── kafka_pdf_producer.py
-│   ├── kafka_consumer_kg.py
-│   ├── kafka_mongo_consumer.py
-│   └── kafka_api_fetcher.py
-├── kg_builder/                # KG builder scripts
-│   ├── kg_builder.py
-│   └── kg_edge_builder.py
-├── mongo-init-scripts/        # Optional MongoDB init scripts
-├── nosqlenv/                  # Python virtual environment
-├── samples/                   # Example papers / PDFs
-├── .env                       # Environment variables
-└── docker-compose.yml         # Optional Docker setup
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│   API       │    │    Kafka    │    │  Knowledge  │
+│  Sources    │ -> │   Stream    │ -> │   Graph     │
+│ (ArXiv,etc) │    │  Pipeline   │    │  Builder    │
+└─────────────┘    └─────────────┘    └─────────────┘
+                           │
+                           ▼
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│ Streamlit   │    │  MongoDB    │    │  Sharding   │
+│ Dashboard   │ <- │   Atlas     │ <- │ Strategies  │
+└─────────────┘    └─────────────┘    └─────────────┘
 ```
 
----
+## 🚀 Quick Start
 
-## **Environment Setup**
+### Prerequisites
 
-1. **Create a virtual environment**
+- Docker and Docker Compose
+- MongoDB Atlas account (for production) or local MongoDB
+- Python 3.8+ (for local development)
+
+### 1. Clone and Setup
 
 ```bash
-python -m venv nosqlenv
+git clone <repository-url>
+cd NoSQL_Project
+cp .env.example .env
 ```
 
-2. **Activate the environment**
+### 2. Configure Environment
+
+Edit `.env` file with your MongoDB Atlas credentials:
+
+```env
+MONGODB_USER=your_atlas_username
+MONGODB_PASS=your_atlas_password
+MONGODB_CLUSTER=your_atlas_cluster.mongodb.net
+MONGODB_DB=NOSQL
+```
+
+For local development, you can use the provided MongoDB container by leaving the default settings.
+
+### 3. Start the Complete System
 
 ```bash
-# Windows
-nosqlenv\Scripts\activate
-# Linux/Mac
-source nosqlenv/bin/activate
+./run.sh
 ```
 
-3. **Install dependencies**
+This will start all services:
+- MongoDB (local) or connect to Atlas
+- Apache Kafka with Zookeeper
+- Kafka Producer (API fetcher)
+- Kafka Consumer (KG builder)
+- Streamlit Dashboard
+- Kafka UI
+- MongoDB Express
+
+### 4. Access the Dashboard
+
+- **Streamlit Dashboard**: http://localhost:8501
+- **Kafka UI**: http://localhost:8080
+- **MongoDB Express**: http://localhost:8081
+
+## 🧪 Testing and Benchmarking
+
+### MongoDB Atlas Sharding
+
+For production deployment with MongoDB Atlas:
+
+```bash
+python enable_atlas_sharding.py --connection-string "mongodb+srv://username:password@cluster.mongodb.net/NOSQL"
+```
+
+This script enables sharding for the database and collections with appropriate shard keys.
+
+### Sharding Benchmarks
+
+To benchmark different sharding strategies:
+
+```bash
+python benchmark_sharding.py --connection-string "mongodb+srv://username:password@cluster.mongodb.net/NOSQL"
+```
+
+This generates performance metrics for various operations across different collections and sharding configurations.
+
+### Pipeline Integration Test
+
+To test the complete pipeline integration:
+
+```bash
+python test_pipeline.py --connection-string "mongodb+srv://username:password@cluster.mongodb.net/NOSQL" --bootstrap-servers "localhost:9092"
+```
+
+This runs the producer and consumer, monitors the process, and verifies that data is flowing correctly through the system.
+
+## 📊 Dashboard Features
+
+### Real-time Knowledge Graph Visualization
+- Interactive network graph showing papers, authors, institutions, and concepts
+- Real-time updates as new data is ingested
+- Configurable node limits, layout types, and display options
+- Node filtering by type and relation filtering
+- Dynamic node sizing based on connections
+- Detailed hover information including abstracts and keywords
+
+### Sharding Performance Analysis
+- Comparison of different sharding strategies:
+  - Modulo Hashing
+  - Consistent Hashing
+  - Range-based Partitioning
+- Performance metrics and benchmarks
+- Load balancing analysis
+
+### Data Ingestion Control
+- Manual API fetching controls
+- Real-time pipeline monitoring
+- System status indicators
+- Manual refresh button for immediate data updates
+
+### Database Insights
+- Live statistics (papers, nodes, edges)
+- Recent papers table
+- Growth metrics
+
+## 🔧 Manual Setup (Development)
+
+### Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-4. **Configure environment variables** (`.env` file):
+### Start Individual Components
 
-```
-MONGODB_USER=<username> (sample : nosql_db)
-MONGODB_PASS=<password> (sample: nosql_db)
-MONGODB_CLUSTER=<cluster name> (sample: nosql.vojsy9y.mongodb.net)
-MONGODB_DB=<database_name> (sample: NOSQL)
-KAFKA_BOOTSTRAP=localhost:9092
-```
-
----
-
-## **MongoDB Atlas Setup**
-
-1. Create a MongoDB Atlas cluster (M2 or higher for sharding).
-2. Create a user (`nosql_db`) with **readWrite** permissions on the `NOSQL` database.
-3. Whitelist your IP in Atlas network access.
-4. Update `.env` with your credentials.
-
-**Test connection:**
-
-```python
-from pymongo.mongo_client import MongoClient
-from pymongo.server_api import ServerApi
-
-uri = "mongodb+srv://<username>:<password>@nosql.vojsy9y.mongodb.net/?retryWrites=true&w=majority"
-client = MongoClient(uri, server_api=ServerApi('1'))
-
-try:
-    client.admin.command('ping')
-    print("✅ Successfully connected and authenticated!")
-except Exception as e:
-    print("❌ Connection failed:", e)
-```
-
----
-
-## **Kafka Setup**
-
-1. Install Kafka and Zookeeper locally or via Docker.
-2. Start Zookeeper:
-
-```bash
-zookeeper-server-start.sh config/zookeeper.properties
-```
-
-3. Start Kafka broker:
-
-```bash
-kafka-server-start.sh config/server.properties
-```
-
-4. Create topics:
-
-```bash
-kafka-topics.sh --create --topic raw_papers --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
-```
-
----
-
-## **Running the Pipeline**
-
-### **1. Start the full pipeline**
-
-```bash
-python pipeline_runner.py
-```
-
-* Starts Kafka producer and consumer threads.
-* Monitors MongoDB `papers` collection and triggers KG builder.
-* Logs will show ingestion, normalization, and KG updates.
-
-### **2. Verify MongoDB collections**
-
-Collections automatically created:
-
-* `papers`
-* `kg_nodes`
-* `kg_edges`
-
----
-
-## **API**
-
-### **Run FastAPI server**
-
-```bash
-uvicorn api.main:app --reload
-```
-
-* Available at: [http://127.0.0.1:8000](http://127.0.0.1:8000)
-
-### **Example Endpoints**
-
-* **Nodes:** `/nodes`
-* **Edges:** `/edges`
-* **Search by text:** `/search`
-* **Search embeddings:** `/search_embeddings`
-* **Traverse KG:** `/traverse`
-
-Test via browser or Postman.
-
----
-
-## **Sharding Notes**
-
-> ⚠️ Only possible on **M2 or higher clusters**, not free-tier (M0).
-
-* Enable sharding via Atlas UI:
-
-  1. Navigate to **Clusters → Collections → NOSQL → Collection → Shard Collection**.
-  2. Choose shard key:
-
-     * `papers`: `"id"` (hashed)
-     * `kg_nodes`: `"id"` (hashed)
-     * `kg_edges`: `{ "source": 1, "target": 1 }`
-
----
-
-## **Troubleshooting**
-
-1. **SSL errors connecting to Atlas**
-
-   * Ensure Python OpenSSL >= 3.0.
-   * Use correct MongoDB URI format with `mongodb+srv://`.
-
-2. **Authentication errors**
-
-   * Check `.env` credentials match Atlas user.
-   * Ensure user has readWrite on `NOSQL` database.
-
-3. **Kafka connection issues**
-
-   * Verify broker is running and topic exists.
-   * Check `bootstrap_servers` in `.env`.
-
-4. **Module import errors**
-
-   * Run scripts from the **project root**.
-
+1. **Start Local Services**:
    ```bash
-   python -m api.main
+   docker-compose up -d mongo kafka zookeeper
    ```
 
+2. **Start Kafka Producer**:
+   ```bash
+   KAFKA_BOOTSTRAP_SERVERS=localhost:9092 python ingestion/kafka_producer.py
+   ```
+
+3. **Start Kafka Consumer**:
+   ```bash
+   KAFKA_BOOTSTRAP_SERVERS=localhost:9092 python ingestion/kafka_consumer_kg.py
+   ```
+
+4. **Start Dashboard**:
+   ```bash
+   streamlit run ui/app.py
+   ```
+
+## 🗂️ Sharding Strategies
+
+The project implements and benchmarks three sharding strategies:
+
+### 1. Modulo Hashing
+- Simple hash-based distribution
+- Good for uniform data distribution
+- Fast routing decisions
+
+### 2. Consistent Hashing
+- Virtual nodes for better load balancing
+- Minimal data movement when adding/removing shards
+- Better handling of hot spots
+
+### 3. Range-based Partitioning
+- Partitions based on document properties (e.g., publication year)
+- Good for range queries
+- Natural data organization
+
+## 📈 Performance Benchmarks
+
+Run sharding benchmarks:
+
+```bash
+python benchmarks/sharding_bench.py
+```
+
+Or use the dashboard's benchmark feature for interactive analysis.
+
+## 🐳 Docker Services
+
+| Service | Port | Description |
+|---------|------|-------------|
+| nosql-app | 8501 | Main Streamlit application |
+| kafka | 9092 | Apache Kafka broker |
+| kafka-ui | 8080 | Kafka management UI |
+| mongo | 27017 | MongoDB database |
+| mongo-express | 8081 | MongoDB web interface |
+| zookeeper | 2181 | Kafka coordination |
+
+## 📁 Project Structure
+
+```
+NoSQL_Project/
+├── api/                    # Database connection and API routes
+├── benchmarks/            # Sharding performance benchmarks
+├── ingestion/             # Kafka producers and consumers
+├── kg_builder/            # Knowledge graph construction
+├── mongo-init-scripts/    # MongoDB initialization
+├── ui/                    # Streamlit dashboard
+├── docker-compose.yml     # Complete Docker setup
+├── Dockerfile            # Application container
+├── requirements.txt      # Python dependencies
+└── run.sh               # Startup script
+```
+
+## 🔍 Monitoring
+
+### View Logs
+
+```bash
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f nosql-app
+docker-compose logs -f kafka-producer
+docker-compose logs -f kafka-consumer
+```
+
+### Check Service Status
+
+```bash
+docker-compose ps
+```
+
+### Stop Services
+
+```bash
+docker-compose down
+```
+
+## 🛠️ Configuration
+
+### Kafka Configuration
+- **Bootstrap servers (local host apps)**: `localhost:9092`
+- **Bootstrap servers (inside Docker containers)**: `kafka:29092`
+- **Topic**: `raw_papers`
+- **Auto-commit**: enabled
+
+Set `KAFKA_BOOTSTRAP_SERVERS` accordingly for producers/consumers. The compose file sets `kafka:29092` for in-container services; running locally uses `localhost:9092`.
+
+### MongoDB Configuration
+- Database: `NOSQL`
+- Collections: `papers`, `nodes`, `edges`
+- Connection: Atlas or local container
+
+### Sharding Configuration
+- Default shards: 3
+- Strategies: modulo, consistent, range
+- Benchmark iterations: 2000
+
+## 🚨 Troubleshooting
+
+### Common Issues
+
+1. **Docker not starting**: Ensure Docker is running and has sufficient resources
+2. **MongoDB connection failed**: Check Atlas credentials in `.env` file
+3. **Kafka connection timeout**: Wait for Kafka to fully initialize (30-60 seconds)
+4. **Port conflicts**: Check if ports 8501, 9092, 27017 are available
+
+### Reset Everything
+
+```bash
+docker-compose down -v
+docker system prune -f
+./run.sh
+```
+
+## 📚 API Data Sources
+
+- **ArXiv**: Academic preprints in physics, mathematics, computer science
+- **PubMed**: Biomedical literature database
+- **CrossRef**: Scholarly publication metadata
+
+## 🎛️ Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MONGODB_URI` | MongoDB connection string | Atlas or local |
+| `KAFKA_BOOTSTRAP_SERVERS` | Kafka brokers | localhost:9092 |
+| `NUM_SHARDS` | Number of shards for benchmarking | 3 |
+| `BATCH_SIZE` | API fetch batch size | 10 |
+
+## 📊 Performance Metrics
+
+The system tracks:
+- Query response times
+- Throughput (operations/second)
+- Load balancing efficiency
+- Data distribution patterns
+- Real-time ingestion rates
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests for new functionality
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🆘 Support
+
+For issues and questions:
+1. Check the troubleshooting section
+2. Review Docker and service logs
+3. Ensure all prerequisites are met
+4. Verify environment configuration
+
 ---
 
-## **References**
-
-* [MongoDB Atlas Documentation](https://docs.atlas.mongodb.com/)
-* [Kafka Python Client](https://kafka-python.readthedocs.io/en/master/)
-* [FastAPI Documentation](https://fastapi.tiangolo.com/)
-
----
+**Built with**: Python, Streamlit, MongoDB Atlas, Apache Kafka, Docker, NetworkX, Plotly

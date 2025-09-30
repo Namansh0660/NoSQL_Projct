@@ -13,7 +13,11 @@ Handles edge cases:
 """
 
 import re
-from api.db import kg_nodes_collection, kg_edges_collection  # ✅ Atlas collections
+import sys
+import os
+# Add project root to Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from api.db import nodes_collection as kg_nodes_collection, edges_collection as kg_edges_collection  # ✅ Atlas collections
 
 # -----------------------------
 # Utility Functions

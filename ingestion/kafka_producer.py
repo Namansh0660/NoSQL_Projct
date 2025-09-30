@@ -17,7 +17,7 @@ from dataclasses import dataclass, asdict
 from hashlib import sha256
 from typing import Any, Dict, Optional
 
-from kafka_api_fetcher import fetch_arxiv, fetch_pubmed, fetch_crossref
+from ingestion.kafka_api_fetcher import fetch_arxiv, fetch_pubmed, fetch_crossref
 from kafka import KafkaProducer
 from kafka.errors import KafkaError
 
@@ -136,16 +136,13 @@ def publish_envelope(producer: KafkaProducer, envelope: MessageEnvelope, topic: 
     return False
 
 # -------------------------
-# Graceful shutdown
+# Graceful shutdown (signals only when running as script)
 # -------------------------
 _shutdown = False
 def _signal_handler(signum, frame):
     global _shutdown
     logger.info("Received signal %s - graceful shutdown", signum)
     _shutdown = True
-
-signal.signal(signal.SIGINT, _signal_handler)
-signal.signal(signal.SIGTERM, _signal_handler)
 
 # -------------------------
 # Produce document helper
@@ -171,9 +168,36 @@ def produce_document(producer: KafkaProducer, payload: Any, source: str = "crawl
 # Main continuous loop
 # -------------------------
 def main():
-    producer = make_producer()
+    # Retry connection to Kafka with backoff
+    max_retries = 5
+    retry_delay = 5
+    producer = None
+    
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Connecting to Kafka at {BOOTSTRAP_SERVERS} (attempt {attempt+1}/{max_retries})")
+            producer = make_producer()
+            # Test connection by sending a small message
+            test_msg = {"test": True, "timestamp": time.time()}
+            producer.send(DEFAULT_TOPIC, value=json.dumps(test_msg).encode('utf-8')).get(timeout=10)
+            logger.info("Successfully connected to Kafka")
+            break
+        except Exception as e:
+            logger.error(f"Failed to connect to Kafka (attempt {attempt+1}/{max_retries}): {e}")
+            if producer:
+                try:
+                    producer.close(timeout=5)
+                except:
+                    pass
+            if attempt < max_retries - 1:
+                logger.info(f"Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+            else:
+                logger.error("Max retries reached. Exiting.")
+                return
+    
     seen_ids = set()
-
     logger.info("Starting continuous API fetch & Kafka publishing loop...")
 
     try:
@@ -187,6 +211,7 @@ def main():
                     unique_papers.append(p)
                     seen_ids.add(key)
 
+            logger.info(f"Fetched {len(papers)} papers, {len(unique_papers)} unique")
             for paper in unique_papers:
                 produce_document(producer, paper, source=paper.get("source", "api"), provenance={"fetch_url": paper.get("fetch_url")})
 
@@ -206,4 +231,11 @@ def main():
         logger.info("Producer closed. Exiting.")
 
 if __name__ == "__main__":
+    try:
+        # Only register signal handlers in main interpreter thread
+        signal.signal(signal.SIGINT, _signal_handler)
+        signal.signal(signal.SIGTERM, _signal_handler)
+    except Exception:
+        # In embedded environments (e.g., Streamlit), signals may be unsupported
+        pass
     main()

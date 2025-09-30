@@ -27,12 +27,26 @@ import sys
 import time
 import logging
 from typing import Dict, Any
-from pdfminer.high_level import extract_text, extract_pages
-from pdfminer.pdfparser import PDFSyntaxError
-from pdfminer.pdfdocument import PDFEncryptionError
-from pdfminer.layout import LTTextContainer, LTChar, LAParams
-from PIL import Image
-import pytesseract
+
+# Try to import pdfminer, but provide a fallback if not available
+try:
+    from pdfminer.high_level import extract_text, extract_pages
+    from pdfminer.pdfparser import PDFSyntaxError
+    from pdfminer.pdfdocument import PDFEncryptionError
+    from pdfminer.layout import LTTextContainer, LTChar, LAParams
+    PDFMINER_AVAILABLE = True
+except ImportError:
+    PDFMINER_AVAILABLE = False
+    logger = logging.getLogger("pdf_parser")
+    logger.warning("pdfminer.six not available. PDF extraction will be limited.")
+
+# Try to import PIL and pytesseract for OCR fallback
+try:
+    from PIL import Image
+    import pytesseract
+    OCR_AVAILABLE = True
+except ImportError:
+    OCR_AVAILABLE = False
 
 # Setup logging
 logging.basicConfig(
@@ -82,6 +96,15 @@ def extract_pdf_text(file_path: str) -> Dict[str, Any]:
     """
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"PDF file does not exist: {file_path}")
+        
+    # Check if pdfminer is available
+    if not PDFMINER_AVAILABLE:
+        logger.error("Cannot extract PDF text: pdfminer.six is not installed. Please install with 'pip install pdfminer.six'")
+        return {
+            "text": "ERROR: PDF extraction failed - pdfminer.six not installed",
+            "metadata": {"num_pages": 0, "size_bytes": 0, "parser": "none"},
+            "provenance": {"file": file_path, "fetched_at": int(time.time())}
+        }
 
     file_size = os.path.getsize(file_path)
     timestamp = time.time()
@@ -113,6 +136,13 @@ def extract_pdf_text(file_path: str) -> Dict[str, Any]:
             return result
         else:
             logger.warning(f"⚠️ PDF text empty, attempting OCR: {file_path}")
+            # Check if OCR is available
+            if not OCR_AVAILABLE:
+                logger.error("Cannot perform OCR: pytesseract or PIL not installed. Please install with 'pip install pytesseract pillow'")
+                result["text"] = "ERROR: OCR failed - pytesseract or PIL not installed"
+                result["metadata"]["parser"] = "none"
+                return result
+                
             # fallback OCR
             text = ocr_pdf(file_path)
             result["text"] = normalize_text(text)
@@ -128,6 +158,13 @@ def extract_pdf_text(file_path: str) -> Dict[str, Any]:
 
     except PDFSyntaxError:
         logger.warning(f"❌ Corrupted PDF detected, attempting OCR if possible: {file_path}")
+        # Check if OCR is available
+        if not OCR_AVAILABLE:
+            logger.error("Cannot perform OCR: pytesseract or PIL not installed. Please install with 'pip install pytesseract pillow'")
+            result["text"] = "ERROR: OCR failed - pytesseract or PIL not installed"
+            result["metadata"]["parser"] = "none"
+            return result
+            
         try:
             text = ocr_pdf(file_path)
             result["text"] = normalize_text(text)
@@ -153,10 +190,15 @@ def ocr_pdf(file_path: str) -> str:
     Converts each page to an image using Pillow, then extracts text.
     Requires Tesseract installed on system and pytesseract configured.
     """
+    if not OCR_AVAILABLE:
+        logger.error("Cannot perform OCR: pytesseract or PIL not installed")
+        return "ERROR: OCR failed - dependencies not installed"
+        
     try:
         from pdf2image import convert_from_path
     except ImportError:
-        raise ImportError("pdf2image required for OCR fallback. Install via `pip install pdf2image`")
+        logger.error("pdf2image required for OCR fallback. Install via `pip install pdf2image`")
+        return "ERROR: OCR failed - pdf2image not installed"
 
     try:
         pages = convert_from_path(file_path)
